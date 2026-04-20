@@ -2,7 +2,7 @@
 
 #Section 1 - Importing packages
 import sys
-sys.path.append('/Users/epalmer/Ethan-s-Meteorology-project-')
+sys.path.append('C:/Users/edubp/Ethan-s-Meteorology-project-')
 
 import os
 import torch
@@ -11,68 +11,20 @@ from torch.utils.data import DataLoader, random_split
 from src.data.dataset import TorNETDatabase
 from src.models.cnn import TornadoCNN
 import numpy as np
+import multiprocessing
+multiprocessing.freeze_support()
 
 #Section 2 - Configs
-DATA_DIR = '/Users/epalmer/Ethan-s-Meteorology-project-/data/raw/train/2021' #Directory of the training data
-CHECKPOINT_DIR = '/Users/epalmer/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
-Batch_size = 32 #number of radar images fed into the system
-EPOCHS = 3 # 3 (for inital macbook test) #number of times the dataset is passed through the machine 
+DATA_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/data/raw/train/2021' #Directory of the training data
+CHECKPOINT_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
+# Adding resuming Epochs Functionality
+Resume = True # Change to false to reset the CSI and get a entirely fresh model run (EX: changing model architecture, adding more data, Significantly longer Epochs)
+RESUME_CHECKPOINT = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints/best_model.pt'
+Batch_size = 128 #number of radar images fed into the system
+EPOCHS = 30 # 3 (for inital macbook test) #number of times the dataset is passed through the machine 
 Learning_rate = 0.001 #Rate of learning
 Val_split = 0.2 # save 20% of the data to be used for validation
-Device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu') # Torch will use MPS for mac if available, otherwise uses the device CPU
-print(f'Training on {Device}') # Prints what device the model is running on
-
-#Section 3 - loading in the dataset
-print('Loading dataset...') #prints a string to show the dataset is being loaded
-full_dataset = TorNETDatabase(DATA_DIR) #Access the data to be loaded
-
-#Train and validation
-val_size = int(len(full_dataset) * Val_split) 
-train_size = len(full_dataset) - val_size
-train_dataset, val_dataset = random_split(full_dataset,[train_size, val_size])
-
-print(f"Training samples:   {train_size}")
-print(f"Validation samples: {val_size}")
-
-# Creating the loader
-train_loader = DataLoader(
-    train_dataset, 
-    batch_size = Batch_size,
-    shuffle = True, #Shuffles data so the model doesnt just "learn" the order and actually need to learn the properties
-    num_workers = 0 # Loads data into GPU in parallel so it doesnt sit idle
-)
-
-val_loader = DataLoader(
-    val_dataset,
-    batch_size = Batch_size,
-    shuffle = False, #doesnt need to be shuffled
-    num_workers = 0
-)
-
-# Section 4 - class weights
-# there is about 13x more non-tornadic cell examples compared to tornadic cells in the 2021 torNET dataset, so in order to make the model
-#actually learn we want to add a class weight to make identifing tornadic cells more satisfying to the machine learning algorithm. 
-
-#not-perfect at the moment, will change to be a dynamic calculation of class weight, however hardcoded for simplicity atm
-pos_weight = torch.tensor([5.0]).to(Device) # 5x weight 
-
-#Section 5 - Model, loss, optimizer
-#initialize model
-model = TornadoCNN(in_channels=13).to(Device)
-
-#loss function
-criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-
-#Optimzer
-Optimizer = torch.optim.Adam(model.parameters(), lr=Learning_rate)
-
-#Scheduler
-Scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    Optimizer,
-    mode = 'min',
-    patience = 3,
-    factor = 0.5
-)
+Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # Torch will use MPS for mac if available, otherwise uses the device CPU
 
 # Section 6 - Training loop
 
@@ -98,7 +50,7 @@ def train_epoch(model, loader, criterion, optimizer, device):
 
         #Track metrics
         total_loss += loss.item()
-        predicted = (outputs > 0.5).float()
+        predicted = (outputs > 0.0).float()
         correct += (predicted == y).sum().item()
         total += y.size(0)
 
@@ -106,9 +58,9 @@ def train_epoch(model, loader, criterion, optimizer, device):
             print(f"  Batch {batch_idx}/{len(loader)} "
                   f"Loss: {loss.item():.4f}")
         
-        avg_loss = total_loss/len(loader) #Calculate the average loss
-        accuracy = correct/total #How tors did the model get correct
-        return avg_loss, accuracy 
+    avg_loss = total_loss/len(loader) #Calculate the average loss
+    accuracy = correct/total #How tors did the model get correct
+    return avg_loss, accuracy 
     
 #Section 7 - Validation loop 
 
@@ -128,7 +80,7 @@ def validate(model, loader, criterion, device):
             loss = criterion(outputs, y)
             total_loss += loss.item()
             
-            predicted = (outputs > 0.5).float() 
+            predicted = (outputs > -0.5).float() 
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(y.cpu().numpy())
 
@@ -152,10 +104,9 @@ def validate(model, loader, criterion, device):
 
 #Section 8 - Main training loop
 
-def main():
-    best_csi = 0.0
+def main(start_epoch = 0 , best_csi = 0.0):
 
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
         print(f"\nEpoch {epoch+1}/{EPOCHS}")
         print("-" * 40)
 
@@ -186,4 +137,78 @@ def main():
             print(f"  ✓ New best model saved (CSI: {CSI:.4f})")
 
 if __name__ == '__main__':
-    main()
+    print(f'Training on {Device}') # Prints what device the model is running on
+
+    #Section 3 - loading in the dataset
+    print('Loading dataset...') #prints a string to show the dataset is being loaded
+
+    full_dataset = TorNETDatabase(DATA_DIR) #Access the data to be loaded
+
+    #Train and validation
+    val_size = int(len(full_dataset) * Val_split) 
+    train_size = len(full_dataset) - val_size
+    train_dataset, val_dataset = random_split(full_dataset,[train_size, val_size])
+
+    print(f"Training samples:   {train_size}")
+    print(f"Validation samples: {val_size}")
+
+    # Creating the loader
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size = Batch_size,
+        shuffle = True, #Shuffles data so the model doesnt just "learn" the order and actually need to learn the properties
+        num_workers = 8, # Loads data into GPU in parallel so it doesnt sit idle
+        pin_memory = True,
+        persistent_workers = True, 
+        prefetch_factor = 2
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size = Batch_size,
+        shuffle = False, #doesnt need to be shuffled
+        num_workers = 8,
+        pin_memory = True,
+        persistent_workers = True,
+        prefetch_factor = 2
+    )
+
+    # Section 4 - class weights
+    # there is about 13x more non-tornadic cell examples compared to tornadic cells in the 2021 torNET dataset, so in order to make the model
+    #actually learn we want to add a class weight to make identifing tornadic cells more satisfying to the machine learning algorithm. 
+
+    #not-perfect at the moment, will change to be a dynamic calculation of class weight, however hardcoded for simplicity atm
+    pos_weight = torch.tensor([5.0]).to(Device) # 5x weight 
+
+    #Section 5 - Model, loss, optimizer
+    #initialize model
+    model = TornadoCNN(in_channels=13).to(Device)
+
+    #loss function
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+    #Optimzer
+    Optimizer = torch.optim.Adam(model.parameters(), lr=Learning_rate)
+
+    #Scheduler
+    Scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        Optimizer,
+        mode = 'min',
+        patience = 3,
+        factor = 0.5
+    )
+    # Resume checkpoint (if available)
+    start_epoch = 0 
+    best_csi = 0
+    if Resume and os.path.exists(RESUME_CHECKPOINT):
+        print("loading Checkpoint...")
+        checkpoint = torch.load(RESUME_CHECKPOINT)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        Optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        best_csi = checkpoint["CSI"]
+        print(f'Resumed from epoch {start_epoch} with CSI {best_csi:.4f}')
+
+
+    # Function call
+    main(start_epoch=start_epoch, best_csi=best_csi)
