@@ -2,7 +2,7 @@
 
 #Section 1 - Importing packages
 import sys
-sys.path.append('home/edubp/Ethan-s-Meteorology-project-')
+sys.path.append('/home/edubp/Ethan-s-Meteorology-project-')
 
 import os
 import torch
