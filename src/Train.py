@@ -2,7 +2,7 @@
 
 #Section 1 - Importing packages
 import sys
-sys.path.append('C:/Users/edubp/Ethan-s-Meteorology-project-')
+sys.path.append('home/edubp/Ethan-s-Meteorology-project-')
 
 import os
 import torch
@@ -17,12 +17,12 @@ multiprocessing.freeze_support()
 #Section 2 - Configs
 DATA_YEARS = [2018,2019,2020,2021,2022]
 DATA_DIR = [f'/mnt/c/Users/edubp/Ethan-s-Meteorology-project-/data/processed/train/{year}' for year in DATA_YEARS] #Directory of the training data (using WSL with NVIDIA DALI)
-CHECKPOINT_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
+CHECKPOINT_DIR = 'hoeme//edubp/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
 # Adding resuming Epochs Functionality
-Resume = True # Change to false to reset the CSI and get a entirely fresh model run (EX: changing model architecture, adding more data, Significantly longer Epochs)
-RESUME_CHECKPOINT = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints/best_model.pt'
+Resume = False # Change to false to reset the CSI and get a entirely fresh model run (EX: changing model architecture, adding more data, Significantly longer Epochs)
+RESUME_CHECKPOINT = '/mnt/c/Users/edubp/Ethan-s-Meteorology-project-/checkpoints/best_model.pt'
 Batch_size = 320 #number of radar images fed into the system
-EPOCHS = 30 # 3 (for inital macbook test) #number of times the dataset is passed through the machine 
+EPOCHS = 2 # 3 (for inital macbook test) #number of times the dataset is passed through the machine 
 Learning_rate = 0.001 #Rate of learning
 Val_split = 0.2 # save 20% of the data to be used for validation
 Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # Torch will use MPS for mac if available, otherwise uses the device CPU
