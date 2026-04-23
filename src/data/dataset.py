@@ -20,44 +20,31 @@ RADAR_vars = ["DBZ", "VEL", "KDP", "RHOHV", "ZDR", "WIDTH"]
 #Defining the Class
 
 class TorNETDatabase(Dataset):
-    def __init__ (self, data_dir, transform = None):
-        self.data_dir = data_dir
-        self.transform = transform
-        self.files = [
-            os.path.join(data_dir, f)
-            for f in os.listdir(data_dir)
-            if f.endswith('.nc')
-        ]
+    def __init__ (self, data_dirs, transform = None):
+
+        self.transform = transform 
+        if isinstance(data_dirs, str):
+            data_dirs = [data_dirs]
+
+        self.files = []
+        for data_dir in data_dirs:
+
+            self.files += [
+                os.path.join(data_dir, f)
+                for f in os.listdir(data_dir)
+                if f.endswith('.pt')
+            ]
         self.files.sort()
-        print(f'found{len(self.files)} samples in {data_dir}')
+        print(f'found{len(self.files)} samples across {len(data_dir)} years')
 
     def __len__(self):
         return len(self.files)
     
     def __getitem__ (self, idx):
-        filepath = self.files[idx]
-        ds = xr.open_dataset(filepath)
+        data = torch.load(self.files[idx], weights_only = True)
 
-        # Getting the last frame 
-        channels = []
-        for var in RADAR_vars:
-            for sweep in range(2):
-                data = ds[var].values[-1, :, : , sweep]
-                #Replace the NaN's with 0s
-                data = np.nan_to_num(data, nan = 0.0)
-                channels.append(data)
-
-        # Add a range folding mask (average the last frame for all sweeps)
-        mask = ds['range_folded_mask'].values[-1,:,:,sweep].astype(np.float32)
-        channels.append(mask)
-
-        x = np.stack(channels, axis = 0).astype(np.float32)
-        label = float(ds['frame_labels'].values[-1])
-
-        ds.close()
-
-        x = torch.tensor(x)
-        y = torch.tensor(label)
+        x = data['x']
+        y = data['y']
 
         if self.transform:
             x = self.transform(x)

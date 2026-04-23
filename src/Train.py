@@ -15,12 +15,13 @@ import multiprocessing
 multiprocessing.freeze_support()
 
 #Section 2 - Configs
-DATA_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/data/raw/train/2021' #Directory of the training data
+DATA_YEARS = [2018,2019,2020,2021,2022]
+DATA_DIR = [f'C:/Users/edubp/Ethan-s-Meteorology-project-/data/processed/train/{year}' for year in DATA_YEARS] #Directory of the training data
 CHECKPOINT_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
 # Adding resuming Epochs Functionality
 Resume = True # Change to false to reset the CSI and get a entirely fresh model run (EX: changing model architecture, adding more data, Significantly longer Epochs)
 RESUME_CHECKPOINT = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints/best_model.pt'
-Batch_size = 128 #number of radar images fed into the system
+Batch_size = 320 #number of radar images fed into the system
 EPOCHS = 30 # 3 (for inital macbook test) #number of times the dataset is passed through the machine 
 Learning_rate = 0.001 #Rate of learning
 Val_split = 0.2 # save 20% of the data to be used for validation
@@ -28,7 +29,7 @@ Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # Torch wi
 
 # Section 6 - Training loop
 
-def train_epoch(model, loader, criterion, optimizer, device):
+def train_epoch(model, loader, criterion, optimizer, device, scaler):
     model.train() #model being set into training mode
     total_loss = 0
     correct = 0
@@ -40,13 +41,15 @@ def train_epoch(model, loader, criterion, optimizer, device):
         y = y.to(device).unsqueeze(1)
 
         #Forward Pass
-        optimizer.zero_grad() #Clear old gradients
-        outputs = model(x)  #get predictions
-        loss = criterion(outputs,y) # calculate the loss
+        optimizer.zero_grad()#Clear old gradients
+        with torch.amp.autocast('cuda'):
+            outputs = model(x)  #get predictions
+            loss = criterion(outputs,y) # calculate the loss
 
         #Backward Pass
-        loss.backward() #Calc gradients
-        optimizer.step() #Update weights
+        scaler.scale(loss).backward() #Calc gradients
+        scaler.step(optimizer)
+        scaler.update() #Update weights
 
         #Track metrics
         total_loss += loss.item()
@@ -80,7 +83,7 @@ def validate(model, loader, criterion, device):
             loss = criterion(outputs, y)
             total_loss += loss.item()
             
-            predicted = (outputs > -0.5).float() 
+            predicted = (outputs > -1.5).float() 
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(y.cpu().numpy())
 
@@ -111,7 +114,7 @@ def main(start_epoch = 0 , best_csi = 0.0):
         print("-" * 40)
 
         #Training
-        train_loss, train_acc = train_epoch(model, train_loader, criterion, Optimizer, Device)
+        train_loss, train_acc = train_epoch(model, train_loader, criterion, Optimizer, Device, scaler)
 
         #Validation 
         val_loss, POD, FAR, CSI = validate(model, val_loader, criterion, Device)
@@ -137,6 +140,8 @@ def main(start_epoch = 0 , best_csi = 0.0):
             print(f"  ✓ New best model saved (CSI: {CSI:.4f})")
 
 if __name__ == '__main__':
+
+
     print(f'Training on {Device}') # Prints what device the model is running on
 
     #Section 3 - loading in the dataset
@@ -160,7 +165,7 @@ if __name__ == '__main__':
         num_workers = 8, # Loads data into GPU in parallel so it doesnt sit idle
         pin_memory = True,
         persistent_workers = True, 
-        prefetch_factor = 2
+        prefetch_factor = 4
     )
 
     val_loader = DataLoader(
@@ -170,7 +175,7 @@ if __name__ == '__main__':
         num_workers = 8,
         pin_memory = True,
         persistent_workers = True,
-        prefetch_factor = 2
+        prefetch_factor = 4
     )
 
     # Section 4 - class weights
@@ -178,7 +183,7 @@ if __name__ == '__main__':
     #actually learn we want to add a class weight to make identifing tornadic cells more satisfying to the machine learning algorithm. 
 
     #not-perfect at the moment, will change to be a dynamic calculation of class weight, however hardcoded for simplicity atm
-    pos_weight = torch.tensor([5.0]).to(Device) # 5x weight 
+    pos_weight = torch.tensor([6.0]).to(Device) # 5x weight 
 
     #Section 5 - Model, loss, optimizer
     #initialize model
@@ -197,6 +202,7 @@ if __name__ == '__main__':
         patience = 3,
         factor = 0.5
     )
+    scaler = torch.amp.GradScaler('cuda')
     # Resume checkpoint (if available)
     start_epoch = 0 
     best_csi = 0
