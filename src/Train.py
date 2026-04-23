@@ -16,7 +16,7 @@ multiprocessing.freeze_support()
 
 #Section 2 - Configs
 DATA_YEARS = [2018,2019,2020,2021,2022]
-DATA_DIR = [f'C:/Users/edubp/Ethan-s-Meteorology-project-/data/processed/train/{year}' for year in DATA_YEARS] #Directory of the training data
+DATA_DIR = [f'/mnt/c/Users/edubp/Ethan-s-Meteorology-project-/data/processed/train/{year}' for year in DATA_YEARS] #Directory of the training data (using WSL with NVIDIA DALI)
 CHECKPOINT_DIR = 'C:/Users/edubp/Ethan-s-Meteorology-project-/checkpoints' #Directory for checkpoint files
 # Adding resuming Epochs Functionality
 Resume = True # Change to false to reset the CSI and get a entirely fresh model run (EX: changing model architecture, adding more data, Significantly longer Epochs)
